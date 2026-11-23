@@ -138,6 +138,16 @@
     background: var(--surface); border: 1px solid var(--line); border-radius: 22px;
     padding: 14px; box-shadow: var(--shadow);
   }
+  .picker { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 2px 14px; }
+  .chip {
+    height: 38px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--btn); cursor: pointer; font-weight: 600; font-size: 15px;
+    transition: background-color .15s; -webkit-tap-highlight-color: transparent;
+  }
+  .chip:hover { background: var(--btn-hover); }
+  .chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .chip.km { font-family: "Khmer Sangam MN", "Khmer MN", "Noto Sans Khmer", "Khmer UI", "Leelawadee UI", "Khmer OS System", sans-serif; font-size: 17px; font-weight: 500; }
+  .chip[aria-pressed="true"] { background: var(--primary); color: var(--primary-text); border-color: transparent; }
   .readout {
     display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
     padding: 2px 6px 12px; font-variant-numeric: tabular-nums;
@@ -226,7 +236,7 @@
     <div>
       <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Fourier series · Flag of Cambodia</p>
       <h1>Drawing Angkor Wat with circles</h1>
-      <p class="lede">Every spinning circle below is one wave. Add enough of them, tip to tail, and the last one traces the flag of Cambodia, temple and all.</p>
+      <p class="lede">Every spinning circle below is one wave. Add enough of them, tip to tail, and the last one traces the flag of Cambodia, temple and all, or a word written in Khmer.</p>
     </div>
     <button id="theme" class="icon-btn" type="button" aria-label="Switch to dark mode" title="Toggle light / dark">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2v14a7 7 0 0 1 0-14z"/></svg>
@@ -235,6 +245,12 @@
 
   <main>
     <section class="stage" aria-label="Animation">
+      <div class="picker" role="group" aria-label="What the circles draw">
+        <button type="button" class="chip" data-shape="flag" aria-pressed="true">Flag</button>
+        <button type="button" class="chip km" data-shape="kampuchea" aria-pressed="false" title="Kampuchea (Cambodia)" lang="km">កម្ពុជា</button>
+        <button type="button" class="chip km" data-shape="angkor" aria-pressed="false" title="Angkor Wat" lang="km">អង្គរវត្ត</button>
+        <button type="button" class="chip km" data-shape="hello" aria-pressed="false" title="Suosdei (hello)" lang="km">សួស្តី</button>
+      </div>
       <div class="readout">
         <div><span class="big">N = <span id="nval">1</span></span><span class="label">of 2,048 circles</span></div>
         <div class="err"><span class="big" id="err">–</span><span class="label">error</span></div>
@@ -270,6 +286,7 @@
         <p>Read it as a recipe. Each term is a wave that repeats <i>k</i> times per lap; <i>a<sub>k</sub></i> and <i>b<sub>k</sub></i> say how strong it is. This gives the pen's left–right position <i>x</i>. Its up–down position <i>y</i> gets a recipe of its own.</p>
         <p>The trick behind the circles is to write each point as one complex number, <i>x</i> + <i>iy</i>. Then the waves pair up, and each pair becomes a single circle with a fixed radius that spins <i>k</i> times per lap (backwards when <i>k</i> is negative). Put the circles tip to tail and the tip of the last one draws the shape.</p>
         <p>On this page, the flag's border, its two stripe lines and the temple outline are joined into one closed path and sampled at 2,048 evenly spaced points. A fast Fourier transform turns those points into 2,048 circles, which are sorted from largest to smallest. Only the <i>N</i> largest are used, and <i>N</i> doubles every lap.</p>
+        <p>The Khmer words work the same way. Each word is written in your device's Khmer font, and the outline of every letter, and of every hole inside a letter, is traced. The outlines are joined into one loop by the shortest possible thin bridges between letters, which is why you can see faint lines linking them.</p>
       </section>
 
       <section>
@@ -299,77 +316,261 @@
   'use strict';
 
   /* ------------------------------------------------------------------
-   * 1. Geometry: the flag (625 × 400 units, ratio 16:25)
+   * 1. Shared constants
    * ------------------------------------------------------------------ */
-  const W = 625, H = 400, CX = W / 2, CY = H / 2;
-  const TOP = 100, BOT = 300;          // stripe lines: red band is half the height
-  const M = 2048, MASK = M - 1;        // number of samples = number of terms
+  const W = 625, H = 400, CX = W / 2, CY = H / 2;   // flag: 625 × 400 units (16:25)
+  const TOP = 100, BOT = 300;                       // stripe lines: red band is half the height
+  const M = 2048, MASK = M - 1;                     // number of samples = number of terms
+  const BLUE = '#032EA1', RED = '#E00025';
+  const KHMER_FONT = '"Khmer Sangam MN", "Khmer MN", "Noto Sans Khmer", "Noto Serif Khmer", "Khmer UI", "Leelawadee UI", "Khmer OS System", "Khmer OS", sans-serif';
 
-  // Tower profile, bottom to apex: [half-width fraction, height fraction].
-  // Tiers step inward like the lotus-bud towers of Angkor Wat.
-  const TOWER = [
-    [1, 0], [1, .15], [.88, .15], [.88, .32], [.74, .32], [.74, .5],
-    [.58, .5], [.58, .66], [.42, .66], [.40, .8], [.22, .8], [.12, .93], [0, 1]
-  ];
-  const towerLeft  = (tx, yb, hw, h) => TOWER.map(([u, v]) => [tx - u * hw, yb - v * h]);
-  const towerRight = (tx, yb, hw, h) => TOWER.slice(0, -1).reverse().map(([u, v]) => [tx + u * hw, yb - v * h]);
-
-  // Mirror a left-half polyline that ends on the centre line (x = 0).
-  const mirror = pts => pts.slice(0, -1).reverse().map(([x, y]) => [-x, y]);
-
-  // Left half of the temple silhouette, x measured from the flag centre.
-  const templeHalf = [
-    // five-tier stepped base
-    [-170, 300], [-170, 292], [-162, 292], [-162, 284], [-154, 284], [-154, 276],
-    [-146, 276], [-146, 268], [-138, 268], [-138, 260],
-    // outer gallery wall
-    [-132, 260], [-132, 236],
-    // side tower
-    ...towerLeft(-95, 236, 22, 86), ...towerRight(-95, 236, 22, 86),
-    // inner gallery and raised terrace
-    [-56, 236], [-56, 226],
-    // central (tallest) tower, left side up to the apex on the centre line
-    ...towerLeft(0, 226, 32, 106)
-  ];
-  const temple = templeHalf.concat(mirror(templeHalf));
-
-  // Staircases. Each one is a detour off the base line: up one rail (with
-  // out-and-back rungs), across the top, and down the other rail.
-  function sideStair(out, sx, a, b, yTop, rungs) {
-    const L = y => sx - (a + (b - a) * (BOT - y) / (BOT - yTop));
-    const R = y => 2 * sx - L(y);
-    out.push([L(BOT), BOT]);
-    for (let i = 1; i <= rungs; i++) {
-      const y = BOT - i * (BOT - yTop) / (rungs + 1);
-      out.push([L(y), y], [R(y), y], [L(y), y]);
-    }
-    out.push([L(yTop), yTop], [R(yTop), yTop], [R(BOT), BOT]);
+  function drawBands(ctx) {
+    ctx.fillStyle = BLUE; ctx.fillRect(-CX, -CY, W, H);
+    ctx.fillStyle = RED;  ctx.fillRect(-CX, TOP - CY, W, BOT - TOP);
   }
-  // Left half of the base line (corner + side staircase), mirrored for the
-  // right half; the central staircase is symmetric on its own and goes between.
-  const baseLeft = [[-170, BOT]];
-  sideStair(baseLeft, -95, 13, 7, 236, 5);
-  const centreStair = [];
-  sideStair(centreStair, 0, 18, 9, 226, 6);
-  const baseRight = baseLeft.slice().reverse().map(([x, y]) => [-x, y]);
-  const baseLine = baseLeft.concat(centreStair, baseRight);   // left corner → right corner
-
-  // One closed path: border, both stripe lines, temple and stairs.
-  // A few segments are walked twice so everything joins into a single loop.
-  const path = [];
-  const P = (x, y) => path.push([x, y]);
-  P(0, 0); P(W, 0); P(W, H); P(0, H);                    // border
-  P(0, BOT); P(0, TOP); P(0, BOT);                        // left edge of the red band (out and back)
-  for (const [x, y] of temple) P(CX + x, y);              // lower stripe → temple silhouette
-  for (const [x, y] of baseLine.slice().reverse()) P(CX + x, y); // base line back, with staircases
-  P(CX + 170, BOT); P(W, BOT); P(W, TOP); P(0, TOP);      // base again, lower stripe, upper stripe
-  // (the loop closes from (0, TOP) back to (0, 0))
+  function tracePoly(ctx, pts) {
+    pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+  }
 
   /* ------------------------------------------------------------------
-   * 2. Resample to M evenly spaced points (centred on the flag)
+   * 2a. Shape: the flag with Angkor Wat
    * ------------------------------------------------------------------ */
-  const px = new Float64Array(M), py = new Float64Array(M);
-  (function resample() {
+  function flagShape() {
+    // Tower profile, bottom to apex: [half-width fraction, height fraction].
+    // Tiers step inward like the lotus-bud towers of Angkor Wat.
+    const TOWER = [
+      [1, 0], [1, .15], [.88, .15], [.88, .32], [.74, .32], [.74, .5],
+      [.58, .5], [.58, .66], [.42, .66], [.40, .8], [.22, .8], [.12, .93], [0, 1]
+    ];
+    const towerLeft  = (tx, yb, hw, h) => TOWER.map(([u, v]) => [tx - u * hw, yb - v * h]);
+    const towerRight = (tx, yb, hw, h) => TOWER.slice(0, -1).reverse().map(([u, v]) => [tx + u * hw, yb - v * h]);
+    // Mirror a left-half polyline that ends on the centre line (x = 0).
+    const mirror = pts => pts.slice(0, -1).reverse().map(([x, y]) => [-x, y]);
+
+    // Left half of the temple silhouette, x measured from the flag centre.
+    const templeHalf = [
+      // five-tier stepped base
+      [-170, 300], [-170, 292], [-162, 292], [-162, 284], [-154, 284], [-154, 276],
+      [-146, 276], [-146, 268], [-138, 268], [-138, 260],
+      // outer gallery wall
+      [-132, 260], [-132, 236],
+      // side tower
+      ...towerLeft(-95, 236, 22, 86), ...towerRight(-95, 236, 22, 86),
+      // inner gallery and raised terrace
+      [-56, 236], [-56, 226],
+      // central (tallest) tower, left side up to the apex on the centre line
+      ...towerLeft(0, 226, 32, 106)
+    ];
+    const temple = templeHalf.concat(mirror(templeHalf));
+
+    // Staircases. Each one is a detour off the base line: up one rail (with
+    // out-and-back rungs), across the top, and down the other rail.
+    function stair(out, sx, a, b, yTop, rungs) {
+      const L = y => sx - (a + (b - a) * (BOT - y) / (BOT - yTop));
+      const R = y => 2 * sx - L(y);
+      out.push([L(BOT), BOT]);
+      for (let i = 1; i <= rungs; i++) {
+        const y = BOT - i * (BOT - yTop) / (rungs + 1);
+        out.push([L(y), y], [R(y), y], [L(y), y]);
+      }
+      out.push([L(yTop), yTop], [R(yTop), yTop], [R(BOT), BOT]);
+    }
+    // Left half of the base line (corner + side staircase), mirrored for the
+    // right half; the central staircase is symmetric on its own and goes between.
+    const baseLeft = [[-170, BOT]];
+    stair(baseLeft, -95, 13, 7, 236, 5);
+    const centreStair = [];
+    stair(centreStair, 0, 18, 9, 226, 6);
+    const baseRight = baseLeft.slice().reverse().map(([x, y]) => [-x, y]);
+    const baseLine = baseLeft.concat(centreStair, baseRight);   // left corner → right corner
+
+    // One closed path: border, both stripe lines, temple and stairs.
+    // A few segments are walked twice so everything joins into a single loop.
+    const raw = [];
+    const P = (x, y) => raw.push([x, y]);
+    P(0, 0); P(W, 0); P(W, H); P(0, H);                    // border
+    P(0, BOT); P(0, TOP); P(0, BOT);                        // left edge of the red band (out and back)
+    for (const [x, y] of temple) P(CX + x, y);              // lower stripe → temple silhouette
+    for (const [x, y] of baseLine.slice().reverse()) P(CX + x, y); // base line back, with staircases
+    P(CX + 170, BOT); P(W, BOT); P(W, TOP); P(0, TOP);      // base again, lower stripe, upper stripe
+    // (the loop closes from (0, TOP) back to (0, 0))
+
+    const templePoly = temple.map(([x, y]) => [x, y - CY]);
+    return {
+      path: raw.map(([x, y]) => [x - CX, y - CY]),          // centred on the flag
+      label: 'the flag of Cambodia with Angkor Wat in the middle',
+      fill(ctx) {
+        drawBands(ctx);
+        ctx.beginPath(); tracePoly(ctx, templePoly); ctx.closePath();
+        ctx.fillStyle = '#ffffff'; ctx.fill();
+      }
+    };
+  }
+
+  /* ------------------------------------------------------------------
+   * 2b. Shape: a Khmer word, traced from the font's letter outlines
+   * ------------------------------------------------------------------ */
+
+  // Draw the text on a hidden canvas and return the outline of every letter
+  // and hole as a list of closed loops (in pixels).
+  function traceText(text) {
+    const F = 200, pad = 16;
+    const font = `${F}px ${KHMER_FONT}`;
+    const c = document.createElement('canvas');
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.font = font;
+    const m = g.measureText(text);
+    const left = Math.ceil(m.actualBoundingBoxLeft || 0);
+    const right = Math.ceil(m.actualBoundingBoxRight || m.width);
+    const asc = Math.ceil(m.actualBoundingBoxAscent || F);
+    const desc = Math.ceil(m.actualBoundingBoxDescent || F * 0.4);
+    const w = left + right + 2 * pad, h = asc + desc + 2 * pad;
+    c.width = w; c.height = h;
+    g.font = font; g.fillStyle = '#000';
+    g.fillText(text, pad + left, pad + asc);
+    const rgba = g.getImageData(0, 0, w, h).data;
+    const v = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) v[i] = rgba[4 * i + 3] / 255;
+    return marchingSquares(v, w, h).filter(loop => loop.length >= 12);
+  }
+
+  // Marching squares: find where the image crosses 50% coverage, with
+  // sub-pixel accuracy, and link the crossings into closed loops.
+  function marchingSquares(v, w, h) {
+    const ISO = 0.5, nE = 2 * w * h;            // edge ids: 2·pixel (horizontal), 2·pixel+1 (vertical)
+    const pos = new Float32Array(2 * nE);
+    const link = new Int32Array(2 * nE).fill(-1);
+    const hEdge = (x, y) => {
+      const id = 2 * (y * w + x), a = v[y * w + x], b = v[y * w + x + 1];
+      pos[2 * id] = x + (ISO - a) / (b - a); pos[2 * id + 1] = y; return id;
+    };
+    const vEdge = (x, y) => {
+      const id = 2 * (y * w + x) + 1, a = v[y * w + x], b = v[(y + 1) * w + x];
+      pos[2 * id] = x; pos[2 * id + 1] = y + (ISO - a) / (b - a); return id;
+    };
+    const connect = (a, b) => {
+      link[2 * a + (link[2 * a] === -1 ? 0 : 1)] = b;
+      link[2 * b + (link[2 * b] === -1 ? 0 : 1)] = a;
+    };
+    for (let y = 0; y < h - 1; y++) {
+      for (let x = 0; x < w - 1; x++) {
+        const c = (v[y * w + x] >= ISO ? 8 : 0) | (v[y * w + x + 1] >= ISO ? 4 : 0) |
+                  (v[(y + 1) * w + x + 1] >= ISO ? 2 : 0) | (v[(y + 1) * w + x] >= ISO ? 1 : 0);
+        if (c === 0 || c === 15) continue;
+        const T = () => hEdge(x, y), B = () => hEdge(x, y + 1), L = () => vEdge(x, y), R = () => vEdge(x + 1, y);
+        switch (c) {
+          case 1: case 14: connect(L(), B()); break;
+          case 2: case 13: connect(B(), R()); break;
+          case 3: case 12: connect(L(), R()); break;
+          case 4: case 11: connect(T(), R()); break;
+          case 6: case 9:  connect(T(), B()); break;
+          case 7: case 8:  connect(L(), T()); break;
+          case 5:  connect(L(), T()); connect(B(), R()); break;
+          case 10: connect(L(), B()); connect(T(), R()); break;
+        }
+      }
+    }
+    const seen = new Uint8Array(nE), loops = [];
+    for (let e = 0; e < nE; e++) {
+      if (link[2 * e] === -1 || seen[e]) continue;
+      const loop = [];
+      let prev = -1, cur = e;
+      while (!seen[cur]) {
+        seen[cur] = 1;
+        loop.push([pos[2 * cur], pos[2 * cur + 1]]);
+        const n0 = link[2 * cur], n1 = link[2 * cur + 1];
+        const next = n0 !== prev ? n0 : n1;
+        prev = cur; cur = next;
+      }
+      loops.push(loop);
+    }
+    return loops;
+  }
+
+  // Join separate loops into one closed path. Loops are linked by the shortest
+  // bridges that connect them all (a minimum spanning tree); each bridge is
+  // walked out and back, so it shows up as a single thin line.
+  function joinLoops(loops) {
+    const K = loops.length, STEP = 3;
+    const D = new Float64Array(K * K).fill(Infinity), A = new Int32Array(K * K), B = new Int32Array(K * K);
+    for (let i = 0; i < K; i++) {
+      for (let j = i + 1; j < K; j++) {
+        const Li = loops[i], Lj = loops[j];
+        let best = Infinity, bi = 0, bj = 0;
+        for (let a = 0; a < Li.length; a += STEP) {
+          const ax = Li[a][0], ay = Li[a][1];
+          for (let b = 0; b < Lj.length; b += STEP) {
+            const dx = Lj[b][0] - ax, dy = Lj[b][1] - ay, d = dx * dx + dy * dy;
+            if (d < best) { best = d; bi = a; bj = b; }
+          }
+        }
+        D[i * K + j] = D[j * K + i] = best;
+        A[i * K + j] = bi; B[i * K + j] = bj;
+        A[j * K + i] = bj; B[j * K + i] = bi;
+      }
+    }
+    const inTree = new Uint8Array(K), children = Array.from({ length: K }, () => new Map());
+    inTree[0] = 1;
+    for (let added = 1; added < K; added++) {
+      let best = Infinity, bi = -1, bj = -1;
+      for (let i = 0; i < K; i++) if (inTree[i])
+        for (let j = 0; j < K; j++) if (!inTree[j] && D[i * K + j] < best) { best = D[i * K + j]; bi = i; bj = j; }
+      inTree[bj] = 1;
+      const at = A[bi * K + bj], list = children[bi].get(at) || [];
+      list.push({ child: bj, from: B[bi * K + bj] });
+      children[bi].set(at, list);
+    }
+    const out = [];
+    (function walk(i, s) {
+      const L = loops[i], n = L.length;
+      for (let k = 0; k <= n; k++) {
+        const idx = (s + k) % n;
+        out.push(L[idx]);
+        if (k < n && children[i].has(idx)) {
+          for (const c of children[i].get(idx)) { walk(c.child, c.from); out.push(L[idx]); }
+        }
+      }
+    })(0, 0);
+    return out;
+  }
+
+  function textShape(text, name) {
+    let loops = traceText(text);
+    if (!loops.length) loops = [[[0, 0], [1, 0], [1, 1]]];
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const l of loops) for (const [x, y] of l) {
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+    }
+    const s = Math.min(540 / (x1 - x0), 300 / (y1 - y0)), mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    loops = loops.map(l => l.map(([x, y]) => [(x - mx) * s, (y - my) * s]));
+    return {
+      path: joinLoops(loops),
+      label: `the Khmer word ${text} (${name})`,
+      fill(ctx) {
+        drawBands(ctx);
+        ctx.beginPath();
+        for (const l of loops) { tracePoly(ctx, l); ctx.closePath(); }
+        ctx.fillStyle = '#ffffff'; ctx.fill('evenodd');
+      }
+    };
+  }
+
+  const SHAPES = {
+    flag:      () => flagShape(),
+    kampuchea: () => textShape('កម្ពុជា', 'Kampuchea, Cambodia'),
+    angkor:    () => textShape('អង្គរវត្ត', 'Angkor Wat'),
+    hello:     () => textShape('សួស្តី', 'suosdei, hello'),
+  };
+
+  /* ------------------------------------------------------------------
+   * 3. Resample, Fourier transform, sort by amplitude, error per N
+   * ------------------------------------------------------------------ */
+  const COS = new Float64Array(M), SIN = new Float64Array(M);
+  for (let i = 0; i < M; i++) { COS[i] = Math.cos(2 * Math.PI * i / M); SIN[i] = Math.sin(2 * Math.PI * i / M); }
+
+  // M points evenly spaced along the closed path.
+  function resample(path) {
+    const px = new Float64Array(M), py = new Float64Array(M);
     const segs = [];
     let total = 0;
     for (let i = 0; i < path.length; i++) {
@@ -382,16 +583,11 @@
       const s = j * total / M;
       while (si < segs.length - 1 && segs[si].s0 + segs[si].len <= s) si++;
       const g = segs[si], t = (s - g.s0) / g.len;
-      px[j] = g.a[0] + (g.b[0] - g.a[0]) * t - CX;
-      py[j] = g.a[1] + (g.b[1] - g.a[1]) * t - CY;
+      px[j] = g.a[0] + (g.b[0] - g.a[0]) * t;
+      py[j] = g.a[1] + (g.b[1] - g.a[1]) * t;
     }
-  })();
-
-  /* ------------------------------------------------------------------
-   * 3. Fourier transform (radix-2 FFT) and terms sorted by amplitude
-   * ------------------------------------------------------------------ */
-  const COS = new Float64Array(M), SIN = new Float64Array(M);
-  for (let i = 0; i < M; i++) { COS[i] = Math.cos(2 * Math.PI * i / M); SIN[i] = Math.sin(2 * Math.PI * i / M); }
+    return { px, py };
+  }
 
   function fft(re, im) {
     const n = re.length;
@@ -415,25 +611,26 @@
     }
   }
 
-  const fre = Float64Array.from(px), fim = Float64Array.from(py);
-  fft(fre, fim);
+  function analyse(shape) {
+    const { px, py } = resample(shape.path);
+    const fre = Float64Array.from(px), fim = Float64Array.from(py);
+    fft(fre, fim);
 
-  const order = Array.from({ length: M }, (_, k) => k);
-  const amp = k => Math.hypot(fre[k], fim[k]);
-  order.sort((a, b) => amp(b) - amp(a));
+    const order = Array.from({ length: M }, (_, k) => k);
+    const amp = k => Math.hypot(fre[k], fim[k]);
+    order.sort((a, b) => amp(b) - amp(a));
 
-  // Term i (largest first): z(t) += c_i · e^(i·f_i·t), with c_i = X_k / M.
-  const TF = new Int32Array(M), TR = new Float64Array(M), TI = new Float64Array(M), TA = new Float64Array(M);
-  order.forEach((k, i) => {
-    TF[i] = k <= M / 2 ? k : k - M;      // signed frequency
-    TR[i] = fre[k] / M; TI[i] = fim[k] / M;
-    TA[i] = Math.hypot(TR[i], TI[i]);
-  });
+    // Term i (largest first): z(t) += c_i · e^(i·f_i·t), with c_i = X_k / M.
+    const TF = new Int32Array(M), TR = new Float64Array(M), TI = new Float64Array(M), TA = new Float64Array(M);
+    order.forEach((k, i) => {
+      TF[i] = k <= M / 2 ? k : k - M;      // signed frequency
+      TR[i] = fre[k] / M; TI[i] = fim[k] / M;
+      TA[i] = Math.hypot(TR[i], TI[i]);
+    });
 
-  // Error for every N: mean distance between the N-term curve and the path,
-  // as a percentage of the flag width. Built up one term at a time.
-  const ERR = new Float64Array(M + 1);
-  (function () {
+    // Error for every N: mean distance between the N-term curve and the path,
+    // as a percentage of the flag width. Built up one term at a time.
+    const ERR = new Float64Array(M + 1);
     const rx = new Float64Array(M), ry = new Float64Array(M);
     let sum = 0;
     for (let j = 0; j < M; j++) sum += Math.hypot(px[j], py[j]);
@@ -449,12 +646,17 @@
       }
       ERR[n + 1] = sum / M / W * 100;
     }
-  })();
+    return Object.assign({}, shape, { TF, TR, TI, TA, ERR });
+  }
+
+  const cache = new Map();
+  let S = null;   // the current, analysed shape
 
   // The full curve for the current N, updated incrementally when N changes.
   const curX = new Float64Array(M), curY = new Float64Array(M);
   let curveN = 0;
   function addTerms(from, to, sign) {
+    const { TF, TR, TI } = S;
     for (let n = from; n < to; n++) {
       const f = TF[n], a = sign * TR[n], b = sign * TI[n];
       for (let j = 0; j < M; j++) {
@@ -504,6 +706,7 @@
 
   function render() {
     dirty = false;
+    const { TF, TR, TI, TA } = S;
     const k = dpr * scale, u = 1 / scale;       // u = one CSS pixel in flag units
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = colors.bg;
@@ -512,16 +715,9 @@
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
     if (showColors) {
-      ctx.fillStyle = '#032EA1'; ctx.fillRect(-CX, -CY, W, H);
-      ctx.fillStyle = '#E00025'; ctx.fillRect(-CX, TOP - CY, W, BOT - TOP);
-      ctx.beginPath();
-      temple.forEach(([x, y], i) => i ? ctx.lineTo(x, y - CY) : ctx.moveTo(x, y - CY));
-      ctx.closePath();
-      ctx.fillStyle = '#ffffff'; ctx.fill();
+      S.fill(ctx);
     } else {
-      ctx.beginPath();
-      path.forEach(([x, y], i) => i ? ctx.lineTo(x - CX, y - CY) : ctx.moveTo(x - CX, y - CY));
-      ctx.closePath();
+      ctx.beginPath(); tracePoly(ctx, S.path); ctx.closePath();
       ctx.strokeStyle = colors.guide; ctx.lineWidth = 1.2 * u; ctx.stroke();
     }
 
@@ -585,10 +781,11 @@
   const slider = document.getElementById('slider');
   const playBtn = document.getElementById('play'), colorsBtn = document.getElementById('colors');
   const themeBtn = document.getElementById('theme');
+  const chips = Array.from(document.querySelectorAll('[data-shape]'));
 
-  const S = +slider.max, LOG_MAX = Math.log2(M);
-  const nToS = n => Math.round(Math.log2(n) / LOG_MAX * S);
-  const sToN = s => Math.max(1, Math.min(M, Math.round(2 ** (s / S * LOG_MAX))));
+  const SMAX = +slider.max, LOG_MAX = Math.log2(M);
+  const nToS = n => Math.round(Math.log2(n) / LOG_MAX * SMAX);
+  const sToN = s => Math.max(1, Math.min(M, Math.round(2 ** (s / SMAX * LOG_MAX))));
 
   function fmtErr(e) {
     if (e < 0.005) return '< 0.01%';
@@ -599,11 +796,23 @@
     N = Math.max(1, Math.min(M, Math.round(n)));
     ensureCurve(N);
     $n.textContent = N.toLocaleString('en-US');
-    $err.textContent = fmtErr(ERR[N]);
+    $err.textContent = fmtErr(S.ERR[N]);
     slider.value = nToS(N);
-    slider.style.setProperty('--pct', (slider.value / S * 100) + '%');
-    slider.setAttribute('aria-valuetext', `N = ${N}, error ${fmtErr(ERR[N])}`);
+    slider.style.setProperty('--pct', (slider.value / SMAX * 100) + '%');
+    slider.setAttribute('aria-valuetext', `N = ${N}, error ${fmtErr(S.ERR[N])}`);
     dirty = true;
+  }
+
+  // Switch to another shape and start again from one circle.
+  function setShape(id) {
+    if (!cache.has(id)) cache.set(id, analyse(SHAPES[id]()));
+    S = cache.get(id);
+    curX.fill(0); curY.fill(0); curveN = 0;
+    chips.forEach(c => c.setAttribute('aria-pressed', String(c.dataset.shape === id)));
+    cv.setAttribute('aria-label', `A chain of spinning circles draws ${S.label}.`);
+    holdUntil = 0; afterHold = 'advance';
+    setN(1);
+    phase = 0;
   }
 
   // Jump to N and show its whole curve, then redraw it from the start.
@@ -650,6 +859,10 @@
     requestAnimationFrame(frame);
   }
 
+  chips.forEach(c => c.addEventListener('click', () => {
+    setShape(c.dataset.shape);
+    setPlaying(true);
+  }));
   playBtn.addEventListener('click', () => setPlaying(!playing));
   cv.addEventListener('click', () => setPlaying(!playing));
   colorsBtn.addEventListener('click', () => {
@@ -692,6 +905,7 @@
 
   new ResizeObserver(resize).observe(cv);
   readColors(); syncThemeButton(); resize();
+  setShape('flag');
   setN(reduceMotion ? 64 : 1);
   if (reduceMotion) phase = M;
   setPlaying(playing);
