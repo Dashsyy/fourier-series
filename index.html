@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drawing Angkor Wat with circles</title>
+<meta name="description" content="The flag of Cambodia drawn by a Fourier series: up to 2,048 spinning circles placed tip to tail.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 16'%3E%3Crect width='25' height='16' rx='1.5' fill='%23032EA1'/%3E%3Crect y='4' width='25' height='8' fill='%23E00025'/%3E%3Cpath d='M6.5 11.6h12l-.8-1.2h-1.4l-1-2.6-.8.7-1.5-3.6-1.5 3.6-.8-.7-1 2.6H7.3z' fill='white'/%3E%3C/svg%3E">
+<script>
+  // Apply a saved theme before first paint to avoid a flash.
+  try { var t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<style>
+  :root {
+    --bg: #f4f4f1;
+    --surface: #ffffff;
+    --text: #14161b;
+    --muted: #5c6370;
+    --line: rgba(20, 22, 27, 0.10);
+    --btn: #eef0f4;
+    --btn-hover: #e2e5ec;
+    --primary: #032EA1;
+    --primary-text: #ffffff;
+    --track: #dfe3ea;
+    --code-bg: #f1f3f7;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 32px -12px rgba(10, 20, 60, .14);
+
+    --cv-bg: #ffffff;
+    --cv-circle: rgba(3, 46, 161, 0.22);
+    --cv-arm: rgba(3, 46, 161, 0.55);
+    --cv-trail: #E00025;
+    --cv-guide: rgba(20, 22, 27, 0.09);
+    --cv-neutral: 20, 22, 27;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0c0e13;
+      --surface: #14171f;
+      --text: #e8ebf1;
+      --muted: #98a1b0;
+      --line: rgba(255, 255, 255, 0.09);
+      --btn: #1f2330;
+      --btn-hover: #2a2f3e;
+      --primary: #4d7bff;
+      --primary-text: #ffffff;
+      --track: #2a2f3d;
+      --code-bg: #1b1f2a;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 16px 40px -16px rgba(0,0,0,.6);
+
+      --cv-bg: #10131a;
+      --cv-circle: rgba(140, 170, 255, 0.26);
+      --cv-arm: rgba(170, 192, 255, 0.62);
+      --cv-trail: #ff3d5e;
+      --cv-guide: rgba(255, 255, 255, 0.08);
+      --cv-neutral: 232, 235, 241;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c0e13;
+    --surface: #14171f;
+    --text: #e8ebf1;
+    --muted: #98a1b0;
+    --line: rgba(255, 255, 255, 0.09);
+    --btn: #1f2330;
+    --btn-hover: #2a2f3e;
+    --primary: #4d7bff;
+    --primary-text: #ffffff;
+    --track: #2a2f3d;
+    --code-bg: #1b1f2a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 16px 40px -16px rgba(0,0,0,.6);
+
+    --cv-bg: #10131a;
+    --cv-circle: rgba(140, 170, 255, 0.26);
+    --cv-arm: rgba(170, 192, 255, 0.62);
+    --cv-trail: #ff3d5e;
+    --cv-guide: rgba(255, 255, 255, 0.08);
+    --cv-neutral: 232, 235, 241;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 16px; }
+
+  /* Header */
+  .top {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+    padding: 36px 0 22px;
+  }
+  .eyebrow {
+    margin: 0 0 8px; font-size: 12.5px; font-weight: 650; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .eyebrow .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #E00025; margin-right: 8px; vertical-align: 1px; }
+  h1 {
+    margin: 0; font-size: clamp(30px, 5.4vw, 48px); line-height: 1.06;
+    letter-spacing: -0.025em; font-weight: 760; text-wrap: balance;
+  }
+  .lede { margin: 12px 0 0; color: var(--muted); max-width: 60ch; font-size: 17px; }
+
+  /* Buttons */
+  button { font: inherit; color: inherit; }
+  .btn, .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border: 1px solid var(--line); background: var(--btn); cursor: pointer;
+    border-radius: 12px; transition: background-color .15s, transform .08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn { height: 44px; padding: 0 16px; font-weight: 600; font-size: 15px; white-space: nowrap; }
+  .btn:hover, .icon-btn:hover { background: var(--btn-hover); }
+  .btn:active, .icon-btn:active { transform: scale(.97); }
+  .btn:focus-visible, .icon-btn:focus-visible, input[type="range"]:focus-visible {
+    outline: 2px solid var(--primary); outline-offset: 2px;
+  }
+  .btn.primary { background: var(--primary); border-color: transparent; color: var(--primary-text); min-width: 112px; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn svg, .icon-btn svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
+  .icon-btn { width: 44px; height: 44px; flex: none; }
+  .swatch {
+    width: 22px; height: 14px; border-radius: 3px; flex: none;
+    background: linear-gradient(#032EA1 0 25%, #E00025 25% 75%, #032EA1 75%);
+    box-shadow: 0 0 0 1px var(--line);
+  }
+  #colors[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: transparent; }
+
+  /* Stage */
+  .stage {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 22px;
+    padding: 14px; box-shadow: var(--shadow);
+  }
+  .readout {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    padding: 2px 6px 12px; font-variant-numeric: tabular-nums;
+  }
+  .readout .big { font-size: clamp(22px, 3.8vw, 30px); font-weight: 720; letter-spacing: -0.01em; }
+  .readout .label { color: var(--muted); font-size: 14px; margin-left: 6px; }
+  .readout .err { text-align: right; }
+  canvas {
+    display: block; margin: 0 auto;
+    width: min(100%, calc(74vh * 697 / 472));
+    width: min(100%, calc(74svh * 697 / 472));
+    aspect-ratio: 697 / 472; height: auto;
+    border-radius: 14px; background: var(--cv-bg);
+    cursor: pointer; touch-action: manipulation;
+  }
+  .controls {
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px;
+    padding: 14px 4px 2px;
+  }
+  .slider { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .slider-label { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 28px; margin: 0;
+    background: transparent; cursor: pointer; border-radius: 8px;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 6px;
+    background: linear-gradient(to right, var(--primary) var(--pct, 0%), var(--track) var(--pct, 0%));
+  }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 6px; background: var(--track); }
+  input[type="range"]::-moz-range-progress { height: 6px; border-radius: 6px; background: var(--primary); }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 22px; height: 22px; margin-top: -8px;
+    border-radius: 50%; background: var(--surface); border: 2px solid var(--primary);
+    box-shadow: 0 2px 6px rgba(0,0,0,.18);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%; background: var(--surface);
+    border: 2px solid var(--primary); box-shadow: 0 2px 6px rgba(0,0,0,.18);
+  }
+  .hint { margin: 10px 6px 0; font-size: 13px; color: var(--muted); }
+  kbd {
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 6px;
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--btn);
+  }
+
+  @media (max-width: 560px) {
+    .top { padding-top: 24px; }
+    .stage { padding: 10px; border-radius: 18px; }
+    canvas { border-radius: 10px; }
+    .controls { grid-template-columns: 1fr 1fr; grid-template-areas: "slider slider" "play colors"; gap: 10px 10px; }
+    .slider { grid-area: slider; }
+    #play { grid-area: play; }
+    #colors { grid-area: colors; }
+    .hint { display: none; }
+  }
+
+  /* Explanation */
+  .explain { max-width: 70ch; margin: 56px auto 0; padding: 0 4px; }
+  .explain section { padding: 26px 0; border-top: 1px solid var(--line); }
+  .explain section:first-child { border-top: 0; padding-top: 0; }
+  .explain h2 { margin: 0 0 10px; font-size: 22px; line-height: 1.25; letter-spacing: -0.01em; }
+  .explain h2 .num { color: var(--muted); font-weight: 600; margin-right: 10px; font-variant-numeric: tabular-nums; }
+  .explain p { margin: 0 0 12px; }
+  .explain p:last-child { margin-bottom: 0; }
+  .formula {
+    margin: 16px 0; padding: 18px 20px; border-radius: 14px; background: var(--code-bg);
+    font: italic clamp(18px, 3.4vw, 24px)/1.4 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    text-align: center; overflow-x: auto; white-space: nowrap;
+  }
+  .formula .up { font-style: normal; }
+  .uses { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 10px; }
+  .uses li { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .uses b { display: inline-block; min-width: 3.4em; }
+  footer { max-width: 70ch; margin: 40px auto 0; padding: 22px 4px 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  code { font: .9em ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn, .icon-btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Fourier series · Flag of Cambodia</p>
+      <h1>Drawing Angkor Wat with circles</h1>
+      <p class="lede">Every spinning circle below is one wave. Add enough of them, tip to tail, and the last one traces the flag of Cambodia, temple and all.</p>
+    </div>
+    <button id="theme" class="icon-btn" type="button" aria-label="Switch to dark mode" title="Toggle light / dark">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2v14a7 7 0 0 1 0-14z"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <section class="stage" aria-label="Animation">
+      <div class="readout">
+        <div><span class="big">N = <span id="nval">1</span></span><span class="label">of 2,048 circles</span></div>
+        <div class="err"><span class="big" id="err">–</span><span class="label">error</span></div>
+      </div>
+
+      <canvas id="cv" role="img" aria-label="A chain of spinning circles draws the outline of the Cambodian flag with Angkor Wat in the middle."></canvas>
+
+      <div class="controls">
+        <button id="play" class="btn primary" type="button" aria-label="Pause">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg><span>Pause</span>
+        </button>
+        <label class="slider">
+          <span class="slider-label"><span>Circles</span><span>1 · 2 · 4 … 2,048</span></span>
+          <input id="slider" type="range" min="0" max="20000" step="1" value="0" aria-label="Number of circles, N">
+        </label>
+        <button id="colors" class="btn" type="button" aria-pressed="false">
+          <span class="swatch" aria-hidden="true"></span><span>Colors</span>
+        </button>
+      </div>
+      <p class="hint"><kbd>Space</kbd> plays or pauses. On the slider, arrow keys step N by one and Page Up / Page Down double or halve it. The error is the average distance between the circles' curve and the true outline, as a share of the flag's width.</p>
+    </section>
+
+    <article class="explain">
+      <section>
+        <h2><span class="num">01</span>Any shape, built from waves</h2>
+        <p>In 1807 the French mathematician Joseph Fourier was studying how heat spreads through metal. Along the way he made a bold claim: any repeating pattern, however jagged, can be built by adding up simple, smooth waves of different sizes and speeds. Some of the best mathematicians of the day, Lagrange among them, did not believe him. Two centuries later it is one of the most used ideas in science.</p>
+        <p>A drawing is a repeating pattern too: trace the outline, end where you started, and go round again.</p>
+      </section>
+
+      <section>
+        <h2><span class="num">02</span>The formula</h2>
+        <div class="formula" role="math" aria-label="x of t equals the sum of a k cos k t plus b k sin k t">x(t) = <span class="up">Σ</span> (a<sub>k</sub> cos kt + b<sub>k</sub> sin kt)</div>
+        <p>Read it as a recipe. Each term is a wave that repeats <i>k</i> times per lap; <i>a<sub>k</sub></i> and <i>b<sub>k</sub></i> say how strong it is. This gives the pen's left–right position <i>x</i>. Its up–down position <i>y</i> gets a recipe of its own.</p>
+        <p>The trick behind the circles is to write each point as one complex number, <i>x</i> + <i>iy</i>. Then the waves pair up, and each pair becomes a single circle with a fixed radius that spins <i>k</i> times per lap (backwards when <i>k</i> is negative). Put the circles tip to tail and the tip of the last one draws the shape.</p>
+        <p>On this page, the flag's border, its two stripe lines and the temple outline are joined into one closed path and sampled at 2,048 evenly spaced points. A fast Fourier transform turns those points into 2,048 circles, which are sorted from largest to smallest. Only the <i>N</i> largest are used, and <i>N</i> doubles every lap.</p>
+      </section>
+
+      <section>
+        <h2><span class="num">03</span>Why the towers and stairs need so many circles</h2>
+        <p>Big, slow circles make broad, smooth curves. A sharp corner, like the tip of a tower, the edge of a stair or the corner of the flag, turns instantly, and only very small, very fast circles can turn that quickly. With too few of them, corners come out rounded and wobbly.</p>
+        <p>The wobbles don't spread out evenly. They crowd in right next to the sharp feature. This is the <b>Gibbs phenomenon</b>. Where a signal jumps suddenly, the overshoot never shrinks below about 9% of the jump, however many terms you add; the ripples only squeeze closer to the edge. A corner is gentler than a jump, but its ripples still cluster around it. That is why the error falls quickly at first and then much more slowly, and why the fine details of Angkor Wat appear last.</p>
+      </section>
+
+      <section>
+        <h2><span class="num">04</span>The same math is all around you</h2>
+        <ul class="uses">
+          <li><b>JPEG</b> cuts a photo into 8×8 tiles and describes each one as a sum of cosine waves (a close cousin of Fourier's series). It then drops the fine-detail waves your eye barely notices, which is where most of the space saving comes from.</li>
+          <li><b>MP3</b> does the same for sound: it splits audio into frequencies and throws away the ones hidden behind louder sounds.</li>
+          <li><b>MRI</b> scanners never photograph your body directly. They measure its signal wave by wave, as frequencies, and a Fourier transform turns those measurements into the image.</li>
+        </ul>
+      </section>
+    </article>
+  </main>
+
+  <footer>
+    Plain HTML, CSS and JavaScript, no libraries. Flag colors: blue <code>#032EA1</code>, red <code>#E00025</code>, ratio 16:25.
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ------------------------------------------------------------------
+   * 1. Geometry: the flag (625 × 400 units, ratio 16:25)
+   * ------------------------------------------------------------------ */
+  const W = 625, H = 400, CX = W / 2, CY = H / 2;
+  const TOP = 100, BOT = 300;          // stripe lines: red band is half the height
+  const M = 2048, MASK = M - 1;        // number of samples = number of terms
+
+  // Tower profile, bottom to apex: [half-width fraction, height fraction].
+  // Tiers step inward like the lotus-bud towers of Angkor Wat.
+  const TOWER = [
+    [1, 0], [1, .15], [.88, .15], [.88, .32], [.74, .32], [.74, .5],
+    [.58, .5], [.58, .66], [.42, .66], [.40, .8], [.22, .8], [.12, .93], [0, 1]
+  ];
+  const towerLeft  = (tx, yb, hw, h) => TOWER.map(([u, v]) => [tx - u * hw, yb - v * h]);
+  const towerRight = (tx, yb, hw, h) => TOWER.slice(0, -1).reverse().map(([u, v]) => [tx + u * hw, yb - v * h]);
+
+  // Mirror a left-half polyline that ends on the centre line (x = 0).
+  const mirror = pts => pts.slice(0, -1).reverse().map(([x, y]) => [-x, y]);
+
+  // Left half of the temple silhouette, x measured from the flag centre.
+  const templeHalf = [
+    // five-tier stepped base
+    [-170, 300], [-170, 292], [-162, 292], [-162, 284], [-154, 284], [-154, 276],
+    [-146, 276], [-146, 268], [-138, 268], [-138, 260],
+    // outer gallery wall
+    [-132, 260], [-132, 236],
+    // side tower
+    ...towerLeft(-95, 236, 22, 86), ...towerRight(-95, 236, 22, 86),
+    // inner gallery and raised terrace
+    [-56, 236], [-56, 226],
+    // central (tallest) tower, left side up to the apex on the centre line
+    ...towerLeft(0, 226, 32, 106)
+  ];
+  const temple = templeHalf.concat(mirror(templeHalf));
+
+  // Staircases. Each one is a detour off the base line: up one rail (with
+  // out-and-back rungs), across the top, and down the other rail.
+  function sideStair(out, sx, a, b, yTop, rungs) {
+    const L = y => sx - (a + (b - a) * (BOT - y) / (BOT - yTop));
+    const R = y => 2 * sx - L(y);
+    out.push([L(BOT), BOT]);
+    for (let i = 1; i <= rungs; i++) {
+      const y = BOT - i * (BOT - yTop) / (rungs + 1);
+      out.push([L(y), y], [R(y), y], [L(y), y]);
+    }
+    out.push([L(yTop), yTop], [R(yTop), yTop], [R(BOT), BOT]);
+  }
+  // Left half of the base line (corner + side staircase), mirrored for the
+  // right half; the central staircase is symmetric on its own and goes between.
+  const baseLeft = [[-170, BOT]];
+  sideStair(baseLeft, -95, 13, 7, 236, 5);
+  const centreStair = [];
+  sideStair(centreStair, 0, 18, 9, 226, 6);
+  const baseRight = baseLeft.slice().reverse().map(([x, y]) => [-x, y]);
+  const baseLine = baseLeft.concat(centreStair, baseRight);   // left corner → right corner
+
+  // One closed path: border, both stripe lines, temple and stairs.
+  // A few segments are walked twice so everything joins into a single loop.
+  const path = [];
+  const P = (x, y) => path.push([x, y]);
+  P(0, 0); P(W, 0); P(W, H); P(0, H);                    // border
+  P(0, BOT); P(0, TOP); P(0, BOT);                        // left edge of the red band (out and back)
+  for (const [x, y] of temple) P(CX + x, y);              // lower stripe → temple silhouette
+  for (const [x, y] of baseLine.slice().reverse()) P(CX + x, y); // base line back, with staircases
+  P(CX + 170, BOT); P(W, BOT); P(W, TOP); P(0, TOP);      // base again, lower stripe, upper stripe
+  // (the loop closes from (0, TOP) back to (0, 0))
+
+  /* ------------------------------------------------------------------
+   * 2. Resample to M evenly spaced points (centred on the flag)
+   * ------------------------------------------------------------------ */
+  const px = new Float64Array(M), py = new Float64Array(M);
+  (function resample() {
+    const segs = [];
+    let total = 0;
+    for (let i = 0; i < path.length; i++) {
+      const a = path[i], b = path[(i + 1) % path.length];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len > 1e-9) { segs.push({ a, b, len, s0: total }); total += len; }
+    }
+    let si = 0;
+    for (let j = 0; j < M; j++) {
+      const s = j * total / M;
+      while (si < segs.length - 1 && segs[si].s0 + segs[si].len <= s) si++;
+      const g = segs[si], t = (s - g.s0) / g.len;
+      px[j] = g.a[0] + (g.b[0] - g.a[0]) * t - CX;
+      py[j] = g.a[1] + (g.b[1] - g.a[1]) * t - CY;
+    }
+  })();
+
+  /* ------------------------------------------------------------------
+   * 3. Fourier transform (radix-2 FFT) and terms sorted by amplitude
+   * ------------------------------------------------------------------ */
+  const COS = new Float64Array(M), SIN = new Float64Array(M);
+  for (let i = 0; i < M; i++) { COS[i] = Math.cos(2 * Math.PI * i / M); SIN[i] = Math.sin(2 * Math.PI * i / M); }
+
+  function fft(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {           // bit-reversal permutation
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const half = len >> 1, step = n / len;
+      for (let i = 0; i < n; i += len) {
+        for (let k = 0; k < half; k++) {
+          const wr = COS[k * step], wi = -SIN[k * step];   // e^(-2πik/len)
+          const p = i + k, q = p + half;
+          const vr = re[q] * wr - im[q] * wi, vi = re[q] * wi + im[q] * wr;
+          re[q] = re[p] - vr; im[q] = im[p] - vi;
+          re[p] += vr;        im[p] += vi;
+        }
+      }
+    }
+  }
+
+  const fre = Float64Array.from(px), fim = Float64Array.from(py);
+  fft(fre, fim);
+
+  const order = Array.from({ length: M }, (_, k) => k);
+  const amp = k => Math.hypot(fre[k], fim[k]);
+  order.sort((a, b) => amp(b) - amp(a));
+
+  // Term i (largest first): z(t) += c_i · e^(i·f_i·t), with c_i = X_k / M.
+  const TF = new Int32Array(M), TR = new Float64Array(M), TI = new Float64Array(M), TA = new Float64Array(M);
+  order.forEach((k, i) => {
+    TF[i] = k <= M / 2 ? k : k - M;      // signed frequency
+    TR[i] = fre[k] / M; TI[i] = fim[k] / M;
+    TA[i] = Math.hypot(TR[i], TI[i]);
+  });
+
+  // Error for every N: mean distance between the N-term curve and the path,
+  // as a percentage of the flag width. Built up one term at a time.
+  const ERR = new Float64Array(M + 1);
+  (function () {
+    const rx = new Float64Array(M), ry = new Float64Array(M);
+    let sum = 0;
+    for (let j = 0; j < M; j++) sum += Math.hypot(px[j], py[j]);
+    ERR[0] = sum / M / W * 100;
+    for (let n = 0; n < M; n++) {
+      const f = TF[n], a = TR[n], b = TI[n];
+      sum = 0;
+      for (let j = 0; j < M; j++) {
+        const idx = (f * j) & MASK, c = COS[idx], s = SIN[idx];
+        const x = (rx[j] += a * c - b * s), y = (ry[j] += a * s + b * c);
+        const dx = x - px[j], dy = y - py[j];
+        sum += Math.sqrt(dx * dx + dy * dy);
+      }
+      ERR[n + 1] = sum / M / W * 100;
+    }
+  })();
+
+  // The full curve for the current N, updated incrementally when N changes.
+  const curX = new Float64Array(M), curY = new Float64Array(M);
+  let curveN = 0;
+  function addTerms(from, to, sign) {
+    for (let n = from; n < to; n++) {
+      const f = TF[n], a = sign * TR[n], b = sign * TI[n];
+      for (let j = 0; j < M; j++) {
+        const idx = (f * j) & MASK, c = COS[idx], s = SIN[idx];
+        curX[j] += a * c - b * s; curY[j] += a * s + b * c;
+      }
+    }
+  }
+  function ensureCurve(n) {
+    if (n === curveN) return;
+    if (n > curveN) addTerms(curveN, n, 1);
+    else if (curveN - n < n) addTerms(n, curveN, -1);
+    else { curX.fill(0); curY.fill(0); addTerms(0, n, 1); }
+    curveN = n;
+  }
+
+  /* ------------------------------------------------------------------
+   * 4. Canvas, theme and drawing
+   * ------------------------------------------------------------------ */
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const VX0 = -36, VY0 = -36, VW = W + 72, VH = H + 72;   // view box with margin (697 × 472)
+  let dpr = 1, scale = 1;
+  let colors = {};
+  let dirty = true;
+
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = name => cs.getPropertyValue(name).trim();
+    colors = {
+      bg: v('--cv-bg'), circle: v('--cv-circle'), arm: v('--cv-arm'),
+      trail: v('--cv-trail'), guide: v('--cv-guide'), neutral: v('--cv-neutral')
+    };
+    dirty = true;
+  }
+
+  function resize() {
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    scale = w / VW;
+    dirty = true;
+  }
+
+  const chain = new Float64Array(2 * (M + 1));
+
+  function render() {
+    dirty = false;
+    const k = dpr * scale, u = 1 / scale;       // u = one CSS pixel in flag units
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = colors.bg;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(k, 0, 0, k, k * (CX - VX0), k * (CY - VY0));
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+    if (showColors) {
+      ctx.fillStyle = '#032EA1'; ctx.fillRect(-CX, -CY, W, H);
+      ctx.fillStyle = '#E00025'; ctx.fillRect(-CX, TOP - CY, W, BOT - TOP);
+      ctx.beginPath();
+      temple.forEach(([x, y], i) => i ? ctx.lineTo(x, y - CY) : ctx.moveTo(x, y - CY));
+      ctx.closePath();
+      ctx.fillStyle = '#ffffff'; ctx.fill();
+    } else {
+      ctx.beginPath();
+      path.forEach(([x, y], i) => i ? ctx.lineTo(x - CX, y - CY) : ctx.moveTo(x - CX, y - CY));
+      ctx.closePath();
+      ctx.strokeStyle = colors.guide; ctx.lineWidth = 1.2 * u; ctx.stroke();
+    }
+
+    // Trail: the N-term curve up to the current sample.
+    const j = Math.min(M, Math.floor(phase));
+    const trailW = Math.max(1.5, Math.min(2.6, 2.6 * scale * 1.3)) * u;
+    if (j > 0) {
+      ctx.beginPath();
+      ctx.moveTo(curX[0], curY[0]);
+      const last = Math.min(j, M - 1);
+      for (let i = 1; i <= last; i++) ctx.lineTo(curX[i], curY[i]);
+      if (j >= M) ctx.closePath();
+      if (showColors) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = trailW + 2 * u; ctx.stroke();
+        ctx.strokeStyle = '#FFD24A';
+      } else {
+        ctx.strokeStyle = colors.trail;
+      }
+      ctx.lineWidth = trailW; ctx.stroke();
+    }
+
+    // Epicycles at the current time.
+    const jj = j % M;
+    let x = 0, y = 0;
+    chain[0] = 0; chain[1] = 0;
+    ctx.beginPath();
+    const minR = 0.7 * u;
+    for (let i = 0; i < N; i++) {
+      const r = TA[i];
+      if (r > minR) { ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, 2 * Math.PI); }
+      const idx = (TF[i] * jj) & MASK, c = COS[idx], s = SIN[idx];
+      x += TR[i] * c - TI[i] * s; y += TR[i] * s + TI[i] * c;
+      chain[2 * i + 2] = x; chain[2 * i + 3] = y;
+    }
+    ctx.strokeStyle = showColors ? `rgba(${colors.neutral},0.38)` : colors.circle;
+    ctx.lineWidth = 1 * u; ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let i = 1; i <= N; i++) ctx.lineTo(chain[2 * i], chain[2 * i + 1]);
+    ctx.strokeStyle = showColors ? `rgba(${colors.neutral},0.75)` : colors.arm;
+    ctx.lineWidth = 1.2 * u; ctx.stroke();
+
+    // Pen
+    ctx.beginPath(); ctx.arc(x, y, 6 * u, 0, 2 * Math.PI);
+    ctx.fillStyle = showColors ? 'rgba(255,210,74,0.35)' : colors.trail;
+    ctx.globalAlpha = showColors ? 1 : 0.22; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(x, y, 3 * u, 0, 2 * Math.PI);
+    ctx.fillStyle = showColors ? '#FFD24A' : colors.trail; ctx.fill();
+  }
+
+  /* ------------------------------------------------------------------
+   * 5. State, animation loop and controls
+   * ------------------------------------------------------------------ */
+  const CYCLE_MS = 4500, HOLD_MS = 900, SCRUB_HOLD_MS = 1400;
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let N = 1, phase = 0, playing = !reduceMotion, showColors = false;
+  let holdUntil = 0, afterHold = 'advance';
+
+  const $n = document.getElementById('nval'), $err = document.getElementById('err');
+  const slider = document.getElementById('slider');
+  const playBtn = document.getElementById('play'), colorsBtn = document.getElementById('colors');
+  const themeBtn = document.getElementById('theme');
+
+  const S = +slider.max, LOG_MAX = Math.log2(M);
+  const nToS = n => Math.round(Math.log2(n) / LOG_MAX * S);
+  const sToN = s => Math.max(1, Math.min(M, Math.round(2 ** (s / S * LOG_MAX))));
+
+  function fmtErr(e) {
+    if (e < 0.005) return '< 0.01%';
+    return (e < 10 ? e.toFixed(2) : e.toFixed(1)) + '%';
+  }
+
+  function setN(n) {
+    N = Math.max(1, Math.min(M, Math.round(n)));
+    ensureCurve(N);
+    $n.textContent = N.toLocaleString('en-US');
+    $err.textContent = fmtErr(ERR[N]);
+    slider.value = nToS(N);
+    slider.style.setProperty('--pct', (slider.value / S * 100) + '%');
+    slider.setAttribute('aria-valuetext', `N = ${N}, error ${fmtErr(ERR[N])}`);
+    dirty = true;
+  }
+
+  // Jump to N and show its whole curve, then redraw it from the start.
+  function scrubTo(n) {
+    setN(n);
+    phase = M;
+    holdUntil = performance.now() + SCRUB_HOLD_MS;
+    afterHold = 'restart';
+  }
+
+  function setPlaying(p) {
+    playing = p;
+    playBtn.setAttribute('aria-label', p ? 'Pause' : 'Play');
+    playBtn.innerHTML = p
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg><span>Pause</span>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span>Play</span>';
+    if (p && phase >= M) {
+      if (!holdUntil) afterHold = 'advance';
+      holdUntil = performance.now() + 350;
+    }
+    dirty = true;
+  }
+
+  function step(now, dt) {
+    if (holdUntil) {
+      if (now < holdUntil) return;
+      holdUntil = 0;
+      if (afterHold === 'advance') setN(N >= M ? 1 : Math.min(M, N * 2));
+      afterHold = 'advance';
+      phase = 0;
+    } else {
+      phase += dt * M / CYCLE_MS;
+      if (phase >= M) { phase = M; holdUntil = now + HOLD_MS; afterHold = 'advance'; }
+    }
+    dirty = true;
+  }
+
+  let lastT = performance.now();
+  function frame(now) {
+    const dt = Math.min(50, now - lastT);
+    lastT = now;
+    if (playing) step(now, dt);
+    if (dirty) render();
+    requestAnimationFrame(frame);
+  }
+
+  playBtn.addEventListener('click', () => setPlaying(!playing));
+  cv.addEventListener('click', () => setPlaying(!playing));
+  colorsBtn.addEventListener('click', () => {
+    showColors = !showColors;
+    colorsBtn.setAttribute('aria-pressed', String(showColors));
+    dirty = true;
+  });
+
+  slider.addEventListener('input', () => scrubTo(sToN(+slider.value)));
+  slider.addEventListener('keydown', e => {
+    const map = {
+      ArrowRight: N + 1, ArrowUp: N + 1, ArrowLeft: N - 1, ArrowDown: N - 1,
+      PageUp: N * 2, PageDown: N / 2, Home: 1, End: M
+    };
+    if (e.key in map) { e.preventDefault(); scrubTo(map[e.key]); }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== ' ' || e.altKey || e.ctrlKey || e.metaKey) return;
+    const tag = e.target.tagName;
+    if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+    e.preventDefault();
+    setPlaying(!playing);
+  });
+
+  // Theme: follows the system until the user picks one.
+  const root = document.documentElement;
+  const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+  const currentTheme = () => root.dataset.theme || (darkMQ.matches ? 'dark' : 'light');
+  function syncThemeButton() {
+    themeBtn.setAttribute('aria-label', currentTheme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+  }
+  themeBtn.addEventListener('click', () => {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem('theme', next); } catch (e) {}
+    syncThemeButton(); readColors();
+  });
+  darkMQ.addEventListener('change', () => { syncThemeButton(); readColors(); });
+
+  new ResizeObserver(resize).observe(cv);
+  readColors(); syncThemeButton(); resize();
+  setN(reduceMotion ? 64 : 1);
+  if (reduceMotion) phase = M;
+  setPlaying(playing);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
